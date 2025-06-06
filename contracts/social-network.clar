@@ -182,3 +182,85 @@
     )
   )
 )
+
+;; Update rate limiting counters after successful action
+(define-private (update-rate-limit
+    (user principal)
+    (action-type uint)
+  )
+  (let ((rate-data (unwrap-panic (map-get? RateLimits user))))
+    (map-set RateLimits user
+      (merge rate-data {
+        daily-actions: (+ (get daily-actions rate-data) u1),
+        friend-requests: (+ (get friend-requests rate-data)
+          (if (is-eq action-type u1)
+            u1
+            u0
+          )),
+        status-updates: (+ (get status-updates rate-data)
+          (if (is-eq action-type u2)
+            u1
+            u0
+          )),
+      })
+    )
+  )
+)
+
+;; Comprehensive user activity tracking
+(define-private (update-user-activity (user principal))
+  (let (
+      (current-time stacks-block-height)
+      (activity (default-to {
+        last-seen: current-time,
+        login-count: u0,
+        total-actions: u0,
+        last-action: current-time,
+      }
+        (map-get? UserActivity user)
+      ))
+    )
+    (map-set UserActivity user
+      (merge activity {
+        last-seen: current-time,
+        total-actions: (+ (get total-actions activity) u1),
+        last-action: current-time,
+      })
+    )
+  )
+)
+
+;; Mathematical utility functions
+(define-private (max-uint
+    (a uint)
+    (b uint)
+  )
+  (if (>= a b)
+    a
+    b
+  )
+)
+
+(define-private (min-uint
+    (a uint)
+    (b uint)
+  )
+  (if (<= a b)
+    a
+    b
+  )
+)
+
+;; Friendship validation with comprehensive status checking
+(define-private (are-friends
+    (user1 principal)
+    (user2 principal)
+  )
+  (match (map-get? Friendships {
+    user1: user1,
+    user2: user2,
+  })
+    friendship (is-eq (get status friendship) FRIENDSHIP_ACTIVE)
+    false
+  )
+)
