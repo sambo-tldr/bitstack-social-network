@@ -352,3 +352,76 @@
     )
   )
 )
+
+;; Advanced privacy settings management with granular controls
+(define-public (update-advanced-privacy-settings
+    (friend-list-visible bool)
+    (status-visible bool)
+    (metadata-visible bool)
+    (last-seen-visible bool)
+    (profile-image-visible bool)
+    (encryption-enabled bool)
+  )
+  (let ((caller tx-sender))
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-rate-limit caller u2) ERR_RATE_LIMITED)
+    (map-set UserPrivacy caller {
+      friend-list-visible: friend-list-visible,
+      status-visible: status-visible,
+      metadata-visible: metadata-visible,
+      last-seen-visible: last-seen-visible,
+      profile-image-visible: profile-image-visible,
+      encryption-enabled: encryption-enabled,
+      last-updated: stacks-block-height,
+    })
+    (update-rate-limit caller u2)
+    (update-user-activity caller)
+    (print {
+      event: "privacy-updated",
+      user: caller,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Comprehensive user profile management with encryption support
+(define-public (update-user-profile
+    (name (optional (string-ascii 64)))
+    (metadata (optional (string-utf8 256)))
+    (encryption-key (optional (buff 32)))
+    (profile-image (optional (string-utf8 256)))
+  )
+  (let (
+      (caller tx-sender)
+      (user (unwrap! (map-get? Users caller) ERR_NOT_FOUND))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-rate-limit caller u2) ERR_RATE_LIMITED)
+    (map-set Users caller
+      (merge user {
+        name: (default-to (get name user) name),
+        metadata: (if (is-some metadata)
+          metadata
+          (get metadata user)
+        ),
+        encryption-key: (if (is-some encryption-key)
+          encryption-key
+          (get encryption-key user)
+        ),
+        profile-image: (if (is-some profile-image)
+          profile-image
+          (get profile-image user)
+        ),
+      })
+    )
+    (update-rate-limit caller u2)
+    (update-user-activity caller)
+    (print {
+      event: "profile-updated",
+      user: caller,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
