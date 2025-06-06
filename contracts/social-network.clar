@@ -78,3 +78,107 @@
     last-updated: uint,
   }
 )
+
+;; Rate limiting tracking to prevent spam and abuse
+(define-map RateLimits
+  principal
+  {
+    daily-actions: uint,
+    friend-requests: uint,
+    status-updates: uint,
+    last-reset: uint,
+  }
+)
+
+;; Intelligent batch processing for message optimization
+(define-map UserBatches
+  principal
+  {
+    message-counter: uint,
+    last-batch-timestamp: uint,
+    batch-size: uint,
+    current-batch-items: uint,
+    total-batches: uint,
+  }
+)
+
+;; Comprehensive user activity analytics
+(define-map UserActivity
+  principal
+  {
+    last-seen: uint,
+    login-count: uint,
+    total-actions: uint,
+    last-action: uint,
+  }
+)
+
+;; Bidirectional friendship management system
+(define-map Friendships
+  {
+    user1: principal,
+    user2: principal,
+  }
+  { status: uint }
+)
+
+;; User blocking system for enhanced security
+(define-map BlockedUsers
+  {
+    blocker: principal,
+    blocked: principal,
+  }
+  { timestamp: uint }
+)
+
+;; PRIVATE UTILITY FUNCTIONS
+
+;; Intelligent rate limiting with automatic reset functionality
+(define-private (check-rate-limit
+    (user principal)
+    (action-type uint)
+  )
+  (let (
+      (rate-data (default-to {
+        daily-actions: u0,
+        friend-requests: u0,
+        status-updates: u0,
+        last-reset: stacks-block-height,
+      }
+        (map-get? RateLimits user)
+      ))
+      (current-time stacks-block-height)
+      (should-reset (> (- current-time (get last-reset rate-data)) RATE_LIMIT_RESET_PERIOD))
+    )
+    (if should-reset
+      ;; Reset counters if period expired
+      (begin
+        (map-set RateLimits user {
+          daily-actions: u1,
+          friend-requests: (if (is-eq action-type u1)
+            u1
+            u0
+          ),
+          status-updates: (if (is-eq action-type u2)
+            u1
+            u0
+          ),
+          last-reset: current-time,
+        })
+        true
+      )
+      ;; Check against configured limits
+      (and
+        (< (get daily-actions rate-data) MAX_ACTIONS_PER_DAY)
+        (or
+          (not (is-eq action-type u1))
+          (< (get friend-requests rate-data) MAX_FRIEND_REQUESTS_PER_DAY)
+        )
+        (or
+          (not (is-eq action-type u2))
+          (< (get status-updates rate-data) MAX_STATUS_UPDATES_PER_DAY)
+        )
+      )
+    )
+  )
+)
