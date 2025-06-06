@@ -425,3 +425,104 @@
     (ok true)
   )
 )
+
+;; Dynamic batch size configuration with intelligent bounds checking
+(define-public (set-batch-size (new-size uint))
+  (let (
+      (caller tx-sender)
+      (batch-data (unwrap! (map-get? UserBatches caller) ERR_NOT_FOUND))
+    )
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (and (>= new-size MIN_BATCH_SIZE) (<= new-size MAX_BATCH_SIZE))
+      ERR_INVALID_INPUT
+    )
+    (map-set UserBatches caller (merge batch-data { batch-size: new-size }))
+    (print {
+      event: "batch-size-updated",
+      user: caller,
+      new-size: new-size,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; Secure login tracking with comprehensive analytics
+(define-public (record-login)
+  (let (
+      (caller tx-sender)
+      (activity (default-to {
+        last-seen: stacks-block-height,
+        login-count: u0,
+        total-actions: u0,
+        last-action: stacks-block-height,
+      }
+        (map-get? UserActivity caller)
+      ))
+    )
+    (map-set UserActivity caller
+      (merge activity {
+        last-seen: stacks-block-height,
+        login-count: (+ (get login-count activity) u1),
+      })
+    )
+    (print {
+      event: "user-login",
+      user: caller,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
+
+;; ADDITIONAL MISSING FUNCTIONS FOR COMPLETE FUNCTIONALITY
+
+;; User registration with comprehensive validation
+(define-public (register-user (name (string-ascii 64)))
+  (let ((caller tx-sender))
+    (asserts! (not (user-exists caller)) ERR_ALREADY_EXISTS)
+    (asserts! (> (len name) u0) ERR_INVALID_INPUT)
+    ;; Create user profile
+    (map-set Users caller {
+      name: name,
+      status: STATUS_ACTIVE,
+      timestamp: stacks-block-height,
+      metadata: none,
+      deactivation-time: none,
+      encryption-key: none,
+      profile-image: none,
+    })
+    ;; Initialize privacy settings
+    (map-set UserPrivacy caller {
+      friend-list-visible: true,
+      status-visible: true,
+      metadata-visible: true,
+      last-seen-visible: true,
+      profile-image-visible: true,
+      encryption-enabled: false,
+      last-updated: stacks-block-height,
+    })
+    ;; Initialize batch processing
+    (map-set UserBatches caller {
+      message-counter: u0,
+      last-batch-timestamp: stacks-block-height,
+      batch-size: MIN_BATCH_SIZE,
+      current-batch-items: u0,
+      total-batches: u0,
+    })
+    ;; Initialize activity tracking
+    (map-set UserActivity caller {
+      last-seen: stacks-block-height,
+      login-count: u1,
+      total-actions: u1,
+      last-action: stacks-block-height,
+    })
+    (print {
+      event: "user-registered",
+      user: caller,
+      name: name,
+      timestamp: stacks-block-height,
+    })
+    (ok true)
+  )
+)
