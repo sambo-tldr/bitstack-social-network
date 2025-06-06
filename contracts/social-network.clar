@@ -526,3 +526,46 @@
     (ok true)
   )
 )
+
+;; READ-ONLY FUNCTIONS
+
+;; Get user profile with privacy checks
+(define-read-only (get-user-profile (user principal))
+  (let (
+      (caller tx-sender)
+      (user-data (unwrap! (map-get? Users user) ERR_NOT_FOUND))
+      (privacy (get-privacy-settings user))
+    )
+    (ok {
+      name: (get name user-data),
+      status: (get status user-data),
+      timestamp: (get timestamp user-data),
+      metadata: (if (get metadata-visible privacy)
+        (get metadata user-data)
+        none
+      ),
+      profile-image: (if (get profile-image-visible privacy)
+        (get profile-image user-data)
+        none
+      ),
+    })
+  )
+)
+
+;; Get user activity with privacy controls
+(define-read-only (get-user-activity (user principal))
+  (let (
+      (caller tx-sender)
+      (activity (unwrap! (map-get? UserActivity user) ERR_NOT_FOUND))
+      (privacy (get-privacy-settings user))
+    )
+    (ok {
+      last-seen: (if (get last-seen-visible privacy)
+        (some (get last-seen activity))
+        none
+      ),
+      login-count: (get login-count activity),
+      total-actions: (get total-actions activity),
+    })
+  )
+)
