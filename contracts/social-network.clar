@@ -264,3 +264,91 @@
     false
   )
 )
+
+;; Active user validation with deactivation checks
+(define-private (check-active-user (user principal))
+  (match (map-get? Users user)
+    user-data (and
+      (is-eq (get status user-data) STATUS_ACTIVE)
+      (is-none (get deactivation-time user-data))
+    )
+    false
+  )
+)
+
+;; User existence validation
+(define-private (user-exists (user principal))
+  (is-some (map-get? Users user))
+)
+
+;; Blocking relationship validation
+(define-private (is-blocked
+    (blocker principal)
+    (blocked principal)
+  )
+  (is-some (map-get? BlockedUsers {
+    blocker: blocker,
+    blocked: blocked,
+  }))
+)
+
+;; Privacy settings retrieval with secure defaults
+(define-private (get-privacy-settings (user principal))
+  (default-to {
+    friend-list-visible: true,
+    status-visible: true,
+    metadata-visible: true,
+    last-seen-visible: true,
+    profile-image-visible: true,
+    encryption-enabled: false,
+    last-updated: stacks-block-height,
+  }
+    (map-get? UserPrivacy user)
+  )
+)
+
+;; PUBLIC FUNCTIONS
+
+;; FIXED: Intelligent batch size optimization with proper authorization and validation
+(define-public (optimize-batch-size)
+  (let (
+      (caller tx-sender)
+      (batch-data (unwrap! (map-get? UserBatches caller) ERR_NOT_FOUND))
+      (current-time stacks-block-height)
+      (time-since-last-batch (- current-time (get last-batch-timestamp batch-data)))
+      (current-batch-size (get batch-size batch-data))
+      (items-in-current-batch (get current-batch-items batch-data))
+    )
+    ;; Security checks
+    (asserts! (check-active-user caller) ERR_DEACTIVATED)
+    (asserts! (check-rate-limit caller u0) ERR_RATE_LIMITED)
+    (if (> time-since-last-batch BATCH_EXPIRY_PERIOD)
+      ;; Batch expired, reset and optimize size
+      (begin
+        (map-set UserBatches caller
+          (merge batch-data {
+            batch-size: (max-uint MIN_BATCH_SIZE (/ current-batch-size u2)),
+            current-batch-items: u0,
+            last-batch-timestamp: current-time,
+          })
+        )
+        (update-rate-limit caller u0)
+        (update-user-activity caller)
+        (ok true)
+      )
+      ;; Dynamic adjustment based on usage patterns
+      (begin
+        (map-set UserBatches caller
+          (merge batch-data { batch-size: (min-uint MAX_BATCH_SIZE
+            (if (>= items-in-current-batch (/ current-batch-size u2))
+              (* current-batch-size u2)
+              current-batch-size
+            )) }
+          ))
+        (update-rate-limit caller u0)
+        (update-user-activity caller)
+        (ok true)
+      )
+    )
+  )
+)
